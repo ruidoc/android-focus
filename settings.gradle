@@ -1,0 +1,19 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        mavenCentral()
+        // 添加华为Maven仓库
+        maven { url 'https://developer.huawei.com/repo/' }
+    }
+}
+
+rootProject.name = "ADProject"
+include ':app' 
