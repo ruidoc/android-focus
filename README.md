@@ -1,6 +1,65 @@
-# 本地应用防火墙
+# 应用防火墙 (ADProject)
 
-这是一个 Android 应用防火墙，可以选择本机安装的应用程序，并通过 VPN 拦截其网络访问。
+这是一个 Android 防火墙应用，主要功能是通过 VPN 服务拦截特定应用的网络流量或视频流量。
+
+## 项目结构
+
+项目采用 MVVM 架构模式组织代码，使用 Jetpack Compose 实现用户界面。以下是主要目录结构及其功能：
+
+### 1. service/ - 服务相关
+
+- `FirewallVpnService.kt` - VPN 服务，负责拦截和处理网络流量
+- `FloatingWindowService.kt` - 悬浮窗服务，提供应用悬浮控制界面
+
+### 2. util/ - 工具类
+
+- `FirewallManager.kt` - 防火墙管理器，处理应用拦截规则和视频流量检测
+- `VpnStatusTracker.kt` - VPN 状态跟踪器，监控 VPN 服务的运行状态
+- `AppUtils.kt` - 通用工具类
+
+### 3. model/ - 数据模型
+
+- `AppInfo.kt` - 应用信息模型类，存储应用的基本信息
+
+### 4. ui/ - 用户界面
+
+- **screens/** - 各个屏幕界面
+- **components/** - UI 组件
+- **theme/** - 应用主题样式
+
+### 5. viewmodel/ - 视图模型
+
+- `FirewallViewModel.kt` - 防火墙视图模型，连接 UI 和数据层
+
+### 6. receiver/ - 广播接收器
+
+- `ServiceMonitorReceiver.kt` - 服务监控接收器，监控服务状态
+- `BootReceiver.kt` - 开机启动接收器，处理设备启动时的操作
+
+### 7. widget/ - 桌面小部件
+
+- `FirewallWidgetProvider.kt` - 防火墙小部件提供者，提供桌面小部件功能
+
+### 8. navigation/ - 导航
+
+- `AppNavigation.kt` - 应用导航控制，管理应用内的页面导航
+
+### 9. 主要文件
+
+- `MainActivity.kt` - 主活动，应用的入口点
+- `ADApplication.kt` - 应用类，全局应用配置和初始化
+
+## 核心功能
+
+应用的核心功能在`FirewallVpnService.kt`中实现，通过 VPN 接口拦截和分析网络流量，根据规则决定是否允许流量通过。`FirewallManager.kt`负责管理拦截规则和检测视频流量。
+
+主要功能包括：
+
+- 拦截特定应用的所有网络流量
+- 拦截所有应用的视频流量
+- 通过流量特征分析识别视频内容
+- 提供桌面小部件和悬浮窗快速控制
+- 开机自启动和服务保活机制
 
 ## 功能特点
 

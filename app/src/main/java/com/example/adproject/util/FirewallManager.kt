@@ -8,6 +8,9 @@ import androidx.core.content.edit
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.Build
 
 /**
  * 防火墙管理类
@@ -20,6 +23,7 @@ object FirewallManager {
     private const val KEY_VPN_LAST_ACTIVE_TIME = "vpn_last_active_time"
     private const val KEY_VPN_HEARTBEAT = "vpn_heartbeat"
     private const val BACKUP_FILE_NAME = "firewall_backup.dat"
+    private const val BLOCK_VIDEO_KEY = "block_video"
     
     // 心跳检查间隔（毫秒）
     private const val HEARTBEAT_INTERVAL = 30000L // 30秒
@@ -108,35 +112,17 @@ object FirewallManager {
      * 获取VPN是否激活
      */
     fun isVpnActive(context: Context): Boolean {
-        val prefs = getPrefs(context)
-        val isActive = prefs.getBoolean(KEY_VPN_ACTIVE, false)
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         
-        // 如果SharedPreferences中显示VPN处于活动状态，验证心跳是否正常
-        if (isActive) {
-            val lastHeartbeat = prefs.getLong(KEY_VPN_HEARTBEAT, 0)
-            val currentTime = System.currentTimeMillis()
-            
-            // 如果心跳超时（超过2分钟没有更新），认为VPN已经停止
-            if (currentTime - lastHeartbeat > 2 * 60 * 1000) {
-                Log.d(TAG, "VPN heartbeat timeout, considering VPN inactive")
-                setVpnActive(context, false)
-                return false
-            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val network = connectivityManager.activeNetwork ?: return false
+            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+            return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
         } else {
-            // 如果SharedPreferences中显示VPN不活动，尝试从备份恢复
-            val backupActive = restoreFromBackup(context, KEY_VPN_ACTIVE) as? Boolean
-            if (backupActive == true) {
-                // 检查备份的时间是否在合理范围内（例如30分钟内）
-                val lastActiveTime = prefs.getLong(KEY_VPN_LAST_ACTIVE_TIME, 0)
-                if (System.currentTimeMillis() - lastActiveTime < 30 * 60 * 1000) {
-                    Log.d(TAG, "Restored VPN active state from backup")
-                    setVpnActive(context, true)
-                    return true
-                }
-            }
+            @Suppress("DEPRECATION")
+            val networkInfo = connectivityManager.activeNetworkInfo
+            return networkInfo != null && networkInfo.type == ConnectivityManager.TYPE_VPN
         }
-        
-        return isActive
     }
     
     /**
@@ -164,6 +150,160 @@ object FirewallManager {
             
             // 如果心跳超过1分钟没有更新，但VPN应该是活动的，需要重启
             return currentTime - lastHeartbeat > 60 * 1000
+        }
+        
+        return false
+    }
+    
+    /**
+     * 设置是否屏蔽视频流量
+     */
+    fun setBlockVideo(context: Context, block: Boolean) {
+        val prefs = getPrefs(context)
+        prefs.edit {
+            putBoolean(BLOCK_VIDEO_KEY, block)
+        }
+    }
+    
+    /**
+     * 获取是否屏蔽视频流量
+     */
+    fun isBlockVideo(context: Context): Boolean {
+        val prefs = getPrefs(context)
+        return prefs.getBoolean(BLOCK_VIDEO_KEY, false)
+    }
+    
+    /**
+     * 检查是否应该屏蔽特定的流量
+     */
+    fun shouldBlockTraffic(context: Context, packageName: String, protocol: String, port: Int, host: String): Boolean {
+        // 如果应用在屏蔽列表中，则屏蔽所有流量
+        if (getBlockedApps(context).contains(packageName)) {
+            return true
+        }
+        
+        // 如果启用了视频屏蔽，检查是否是视频流量
+        if (isBlockVideo(context) && isVideoTraffic(protocol, port, host)) {
+            return true
+        }
+        
+        return false
+    }
+    
+    /**
+     * 判断是否是视频流量
+     */
+    private fun isVideoTraffic(protocol: String, port: Int, host: String): Boolean {
+        // 微信特殊处理 - 允许微信的基本功能
+        if (host.contains("weixin.qq.com") || host.contains("wx.qq.com") || 
+            host.contains("tencent.com") || host.contains("qq.com")) {
+            
+            // 只拦截视频号相关域名 - 更精确的列表
+            val wechatVideoSpecificDomains = listOf(
+                "finder.video.qq.com",
+                "finder-video.qq.com",
+                "finderdev.video.qq.com",
+                "findermp.video.qq.com",
+                "wxasrsf.video.qq.com",
+                "szextshort.weixin.qq.com",
+                "szminorshort.weixin.qq.com",
+                "szshort.weixin.qq.com"
+            )
+            
+            // 如果是微信视频号特定域名，则拦截
+            if (wechatVideoSpecificDomains.any { domain -> host == domain }) {
+                return true
+            }
+            
+            // 如果是微信基础域名，检查是否包含视频相关路径 - 更精确的匹配
+            val videoPathPatterns = listOf(
+                "/finder/",
+                "/channels/",
+                "/video/",
+                "/play/",
+                "/stream/"
+            )
+            
+            // 只有当完全匹配视频路径时才拦截
+            for (pattern in videoPathPatterns) {
+                if (host.contains(pattern)) {
+                    // 确保这是一个完整的路径部分，而不是部分匹配
+                    val index = host.indexOf(pattern)
+                    val endIndex = index + pattern.length
+                    
+                    // 检查前后是否是路径分隔符或字符串结束
+                    val isStartValid = index == 0 || host[index - 1] == '/' || host[index - 1] == '.'
+                    val isEndValid = endIndex >= host.length || host[endIndex] == '/' || host[endIndex] == '?' || host[endIndex] == '&'
+                    
+                    if (isStartValid && isEndValid) {
+                        return true
+                    }
+                }
+            }
+            
+            // 默认允许微信域名的流量通过
+            return false
+        }
+        
+        // 视频流量特征检测
+        // 1. 常见视频流媒体服务域名
+        val videoHosts = listOf(
+            "youtube.com", "youtu.be", "netflix.com", "hulu.com", "bilibili.com", 
+            "iqiyi.com", "vimeo.com", "dailymotion.com", "twitch.tv", "tiktok.com",
+            "douyin.com", "kuaishou.com", "hbomax.com", "disneyplus.com", "primevideo.com",
+            "mgtv.com", "youku.com", "tudou.com", "pptv.com", "le.com",
+            "ixigua.com", "douyu.com", "huya.com", "v.qq.com", "wetv.vip",
+            "weibo.com/tv", "facebook.com/watch", "instagram.com/tv", "twitter.com/i/videos"
+        )
+        
+        // 2. 常见视频流媒体CDN域名
+        val videoCdnHosts = listOf(
+            "googlevideo.com", "akamaihd.net", "cloudfront.net", "fastly.net", 
+            "cdn.com", "cdnvideo.ru", "level3.net", "llnwd.net", "footprint.net",
+            "edgecastcdn.net", "bitgravity.com", "limelight.com", "cdn77.org",
+            "cdnetworks.com", "cachefly.net", "hwcdn.net", "steamcontent.com",
+            "alicdn.com", "qiniu.com", "wscdns.com", "chinanetcenter.com",
+            // 腾讯云CDN
+            "qcloudcdn.com", "tencentcdn.com", "tcdn.qq.com", "cdntip.com",
+            "myqcloud.com", "qcloud.la", "coscdn.com", "file.myqcloud.com",
+            "cos.ap-beijing.myqcloud.com", "cos.ap-guangzhou.myqcloud.com"
+        )
+        
+        // 3. 常见视频流媒体端口
+        val videoPorts = listOf(1935, 554, 8080, 8081, 8082, 443, 80)
+        
+        // 4. 常见视频流媒体协议
+        val videoProtocols = listOf("rtmp", "rtsp", "hls", "dash", "http", "https")
+        
+        // 5. 检查常见视频文件扩展名
+        val videoExtensions = listOf(".mp4", ".flv", ".m3u8", ".ts", ".mpd", ".mov", ".avi", ".mkv", ".webm")
+        
+        // 检查域名是否匹配视频服务
+        for (videoHost in videoHosts) {
+            if (host.contains(videoHost)) {
+                return true
+            }
+        }
+        
+        // 检查域名是否匹配视频CDN
+        for (cdnHost in videoCdnHosts) {
+            if (host.contains(cdnHost)) {
+                return true
+            }
+        }
+        
+        // 检查URL是否包含视频文件扩展名
+        for (ext in videoExtensions) {
+            if (host.contains(ext)) {
+                return true
+            }
+        }
+        
+        // 检查端口和协议
+        if (videoPorts.contains(port) && videoProtocols.contains(protocol.lowercase())) {
+            // 不要仅仅因为端口和协议匹配就判断为视频流量
+            // 这可能会误判很多正常HTTP/HTTPS流量
+            return false
         }
         
         return false

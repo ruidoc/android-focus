@@ -37,11 +37,15 @@ class FirewallViewModel : ViewModel() {
                 apps
             }
             
+            // 获取视频屏蔽状态
+            val isBlockVideo = FirewallManager.isBlockVideo(context)
+            
             _uiState.update { 
                 it.copy(
                     appList = apps,
                     isLoading = false,
-                    blockedApps = apps.filter { app -> app.isBlocked }
+                    blockedApps = apps.filter { app -> app.isBlocked },
+                    isBlockVideo = isBlockVideo
                 ) 
             }
         }
@@ -81,6 +85,26 @@ class FirewallViewModel : ViewModel() {
         }
     }
     
+    // 更新视频屏蔽状态
+    fun updateVideoBlockStatus(context: Context, blockVideo: Boolean) {
+        viewModelScope.launch {
+            // 更新存储
+            FirewallManager.setBlockVideo(context, blockVideo)
+            
+            // 更新UI状态
+            _uiState.update { it.copy(isBlockVideo = blockVideo) }
+            
+            // 如果VPN已启动，重启VPN服务以应用新的拦截规则
+            if (_uiState.value.isVpnActive) {
+                restartVpnService(context)
+            } else if (blockVideo) {
+                // 如果VPN未启动但启用了视频屏蔽，则启动VPN
+                FirewallVpnService.start(context)
+                _uiState.update { it.copy(isVpnActive = true) }
+            }
+        }
+    }
+    
     // 切换VPN状态
     fun toggleVpnStatus(context: Context, active: Boolean) {
         viewModelScope.launch {
@@ -113,6 +137,12 @@ class FirewallViewModel : ViewModel() {
         _uiState.update { it.copy(isVpnActive = isActive) }
     }
     
+    // 检查视频屏蔽状态
+    fun checkVideoBlockStatus(context: Context) {
+        val isBlockVideo = FirewallManager.isBlockVideo(context)
+        _uiState.update { it.copy(isBlockVideo = isBlockVideo) }
+    }
+    
     // 切换显示系统应用
     fun toggleShowSystemApps(context: Context) {
         val currentValue = _uiState.value.showSystemApps
@@ -127,5 +157,6 @@ data class FirewallUiState(
     val appList: List<AppInfo> = emptyList(),
     val blockedApps: List<AppInfo> = emptyList(),
     val isVpnActive: Boolean = false,
-    val showSystemApps: Boolean = false
+    val showSystemApps: Boolean = false,
+    val isBlockVideo: Boolean = false
 ) 

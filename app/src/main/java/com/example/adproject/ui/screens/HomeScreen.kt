@@ -76,6 +76,7 @@ import com.example.adproject.ui.theme.Gray200
 import com.example.adproject.ui.theme.Gray500
 import com.example.adproject.ui.theme.Success
 import com.example.adproject.ui.theme.TencentGreen
+import com.example.adproject.util.FirewallManager
 import com.example.adproject.viewmodel.FirewallViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -210,6 +211,10 @@ fun StatusCard(
     blockedCount: Int,
     vpnDuration: String = "00:00:00"
 ) {
+    val context = LocalContext.current
+    var isBlockVideo by remember { mutableStateOf(FirewallManager.isBlockVideo(context)) }
+    val viewModel: FirewallViewModel = viewModel()
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -243,6 +248,36 @@ fun StatusCard(
                     text = "运行时间: $vpnDuration",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Gray500
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // 屏蔽视频开关
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "屏蔽所有视频流量",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "拦截所有应用中的视频播放",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Gray500
+                    )
+                }
+                
+                com.example.adproject.ui.components.CustomSwitch(
+                    checked = isBlockVideo,
+                    onCheckedChange = { checked ->
+                        isBlockVideo = checked
+                        viewModel.updateVideoBlockStatus(context, checked)
+                    },
+                    useGreenTheme = true
                 )
             }
         }

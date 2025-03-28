@@ -5,7 +5,6 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.adproject.FirewallApp
 import com.example.adproject.ui.screens.AppListScreen
 import com.example.adproject.ui.screens.HomeScreen
 
@@ -13,7 +12,6 @@ import com.example.adproject.ui.screens.HomeScreen
 object AppRoutes {
     const val HOME = "home"
     const val APP_LIST = "app_list"
-    const val FIREWALL = "firewall"
 }
 
 @Composable
@@ -27,14 +25,6 @@ fun AppNavigation(
         navController = navController,
         startDestination = startDestination
     ) {
-        // 防火墙主页（原MainActivity中的FirewallApp）
-        composable(AppRoutes.FIREWALL) {
-            FirewallApp(
-                vpnLauncher = vpnLauncher,
-                vpnDuration = vpnDuration
-            )
-        }
-        
         // 首页
         composable(AppRoutes.HOME) {
             HomeScreen(
